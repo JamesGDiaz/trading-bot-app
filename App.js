@@ -1,54 +1,69 @@
-import * as React from 'react';
-import {NavigationContainer} from '@react-navigation/native';
-import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
-import { createStackNavigator } from '@react-navigation/stack';
-import SettingsScreen  from "./screens/SettingsScreen/SettingsScreen";
-import ControlsScreen from './screens/ControlsScreen/ControlsScreen';
-import HomeScreen from './screens/HomeScreen/HomeScreen'
-import Ionicons from 'react-native-vector-icons/Ionicons';
+import React from 'react';
+import { View, StatusBar, Vibration, Platform } from 'react-native';
+import { Notifications } from 'expo';
+import * as Permissions from 'expo-permissions';
+import Constants from 'expo-constants';
+import TradingBotApp from './routes';
 
-const Tab = createBottomTabNavigator();
+export default class App extends React.Component {
+  state = {
+    expoPushToken: '',
+    notification: {},
+  };
 
-const HomeStack = createStackNavigator();
+  registerForPushNotificationsAsync = async () => {
+    if (Constants.isDevice) {
+      const { status: existingStatus } = await Permissions.getAsync(
+        Permissions.NOTIFICATIONS
+      );
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Permissions.askAsync(
+          Permissions.NOTIFICATIONS
+        );
+        finalStatus = status;
+      }
+      if (finalStatus !== 'granted') {
+        console.log('Failed to get permission for push notification!');
+        return;
+      }
+      token = await Notifications.getExpoPushTokenAsync();
+      this.setState({ expoPushToken: token });
+    } else {
+      alert('Must use physical device for Push Notifications');
+    }
 
-function HomeStackScreen() {
-  return (
-    <HomeStack.Navigator>
-      <HomeStack.Screen name="Home" component={HomeScreen} />
-      {/*<HomeStack.Screen name="Details" component={DetailsScreen} />*/}
-    </HomeStack.Navigator>
-  );
-}
+    if (Platform.OS === 'android') {
+      Notifications.createChannelAndroidAsync('trading-bot', {
+        name: 'trading-bot',
+        description: 'Notifications for the trading bot',
+        sound: true,
+        priority: 'max',
+        vibrate: [0, 250, 250, 250],
+        badge: true,
+      });
+    }
+  };
 
-const SettingsStack = createStackNavigator();
+  componentDidMount() {
+    this.registerForPushNotificationsAsync();
+    this._notificationSubscription = Notifications.addListener(
+      this._handleNotification
+    );
+  }
 
-function SettingsStackScreen() {
-  return (
-    <SettingsStack.Navigator>
-      <SettingsStack.Screen name="Settings" component={SettingsScreen} />
-      {/*<SettingsStack.Screen name="Details" component={DetailsScreen} />*/}
-    </SettingsStack.Navigator>
-  );
-}
+  _handleNotification = (notification) => {
+    Vibration.vibrate(500);
+    if (notification.data) console.log(notification.data);
+    this.setState({ notification: notification });
+  };
 
-const ControlsStack = createStackNavigator();
-function ControlsStackScreen(){
-  return(
-    <ControlsStack.Navigator>
-      <ControlsStack.Screen name="Controls" component={ControlsScreen}/>
-    </ControlsStack.Navigator>
-  )
-}
-export default function App() {
+  render() {
     return (
-        <NavigationContainer style={{marginBottom:24}}>
-            <Tab.Navigator >
-                <Tab.Screen name="Home"
-                    component={HomeStackScreen}/>
-                <Tab.Screen name="Controls"
-                    component={ControlsStackScreen}/>
-                <Tab.Screen name="Settings"
-                    component={SettingsStackScreen}/>
-            </Tab.Navigator>
-        </NavigationContainer>
-    );}
+      <View style={{ flex: 1 }}>
+        <StatusBar hidden={false} />
+        <TradingBotApp expoPushToken={this.state.expoPushToken} />
+      </View>
+    );
+  }
+}
